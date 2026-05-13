@@ -1,0 +1,194 @@
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import axios from 'axios';
+import AdmZip from 'adm-zip';
+
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // optional, for higher rate limits
+const MAX_CONTENT_BYTES = 50 * 1024; // 50 KB
+const MAX_FILES_PATH_B = 30;
+const SINGLE_FILE_MAX_BYTES = 10 * 1024; // 10 KB
+const SIZE_GATE_KB = 5 * 1024; // 5 MB in KB
+
+const ALLOWED_EXTENSIONS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs', '.java', '.rb',
+  '.php', '.md', '.json', '.toml', '.yaml', '.yml',
+]);
+const ALLOWED_FILENAMES = new Set(['.env.example', 'Dockerfile', 'dockerfile']);
+
+const HIGH_SIGNAL_FILES = [
+  'README.md', 'package.json', 'pyproject.toml', 'Cargo.toml', 'go.mod', 'gemfile', 'composer.json', 'pom.xml', 'build.gradle',
+  'index.ts', 'index.js', 'main.py', 'app.py', 'server.ts', 'main.go', 'main.rs', 'main.java', 'routes.rb', 'app.rb', 'routes/web.php',
+  'next.config.ts', 'next.config.js', 'next.config.mjs', 'vite.config.ts', 'vite.config.js', 'nuxt.config.ts', 'svelte.config.js',
+  'docker-compose.yml', 'docker-compose.yaml', 'Dockerfile', 'Procfile', 'requirements.txt',
+];
+
+export interface RepoFileData {
+  fileTree: string;
+  keyFiles: Record<string, string>;
+}
+
+function githubHeaders(): Record<string, string> {
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
+  if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+  return headers;
+}
+
+function isAllowedFile(filename: string): boolean {
+  if (ALLOWED_FILENAMES.has(filename)) return true;
+  const ext = path.extname(filename).toLowerCase();
+  return ALLOWED_EXTENSIONS.has(ext);
+}
+
+function truncateIfNeeded(content: string, filepath: string): string {
+  const bytes = Buffer.byteLength(content, 'utf8');
+  if (bytes > SINGLE_FILE_MAX_BYTES) {
+    return content.slice(0, SINGLE_FILE_MAX_BYTES) + '\n[truncated]';
+  }
+  return content;
+}
+
+function capToLimit(files: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  let total = 0;
+  for (const [filepath, content] of Object.entries(files)) {
+    const bytes = Buffer.byteLength(content, 'utf8');
+    if (total + bytes > MAX_CONTENT_BYTES) break;
+    result[filepath] = content;
+    total += bytes;
+  }
+  return result;
+}
+
+// ─── Path A: Zip download ──────────────────────────────────────────────────────
+async function fetchViaZip(owner: string, repo: string, branch: string): Promise<RepoFileData> {
+  const url = `https://api.github.com/repos/${owner}/${repo}/zipball/${branch}`;
+  const response = await axios.get<ArrayBuffer>(url, {
+    headers: githubHeaders(),
+    responseType: 'arraybuffer',
+  });
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repodoc-'));
+  const zipPath = path.join(tmpDir, 'repo.zip');
+
+  try {
+    fs.writeFileSync(zipPath, Buffer.from(response.data));
+    const zip = new AdmZip(zipPath);
+    const entries = zip.getEntries();
+
+    const keyFiles: Record<string, string> = {};
+    const treeLines: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const entryName = entry.entryName;
+      // Strip the root folder prefix that GitHub adds
+      const relativePath = entryName.split('/').slice(1).join('/');
+      const filename = path.basename(relativePath);
+
+      treeLines.push(relativePath);
+
+      if (!isAllowedFile(filename)) continue;
+
+      const content = entry.getData().toString('utf8');
+      keyFiles[relativePath] = truncateIfNeeded(content, relativePath);
+    }
+
+    return {
+      fileTree: treeLines.join('\n'),
+      keyFiles: capToLimit(keyFiles),
+    };
+  } finally {
+    // Cleanup /tmp
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup
+    }
+  }
+}
+
+// ─── Path B: Trees API + selective fetch ──────────────────────────────────────
+async function fetchViaTreesApi(owner: string, repo: string, branch: string): Promise<RepoFileData> {
+  const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+  const treeRes = await axios.get<{
+    tree: Array<{ path: string; type: string; size?: number }>;
+  }>(treeUrl, { headers: githubHeaders() });
+
+  const allFiles = treeRes.data.tree.filter((n) => n.type === 'blob');
+  const treeLines = allFiles.map((n) => n.path);
+
+  // Select high-signal files first, then fill up to cap
+  const selected: string[] = [];
+
+  for (const hsf of HIGH_SIGNAL_FILES) {
+    const match = allFiles.find((f) => path.basename(f.path) === hsf);
+    if (match && !selected.includes(match.path)) {
+      selected.push(match.path);
+    }
+  }
+
+  for (const file of allFiles) {
+    if (selected.length >= MAX_FILES_PATH_B) break;
+    if (selected.includes(file.path)) continue;
+    if (!isAllowedFile(path.basename(file.path))) continue;
+    selected.push(file.path);
+  }
+
+  const keyFiles: Record<string, string> = {};
+  let totalBytes = 0;
+
+  await Promise.allSettled(
+    selected.map(async (filePath) => {
+      try {
+        const contentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+        const res = await axios.get<{ content: string; encoding: string }>(contentUrl, {
+          headers: githubHeaders(),
+        });
+        const content = Buffer.from(res.data.content, 'base64').toString('utf8');
+        const truncated = truncateIfNeeded(content, filePath);
+        const bytes = Buffer.byteLength(truncated, 'utf8');
+        if (totalBytes + bytes <= MAX_CONTENT_BYTES) {
+          keyFiles[filePath] = truncated;
+          totalBytes += bytes;
+        }
+      } catch {
+        // Skip files that fail to fetch
+      }
+    })
+  );
+
+  return {
+    fileTree: treeLines.join('\n'),
+    keyFiles,
+  };
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+export async function fetchRepoFiles(owner: string, repo: string): Promise<RepoFileData> {
+  const metaRes = await axios.get<{ size: number; default_branch: string }>(
+    `https://api.github.com/repos/${owner}/${repo}`,
+    { headers: githubHeaders() }
+  );
+  const { size, default_branch: branch } = metaRes.data;
+
+  if (size < SIZE_GATE_KB) {
+    return fetchViaZip(owner, repo, branch);
+  } else {
+    return fetchViaTreesApi(owner, repo, branch);
+  }
+}
+
+export function parseRepoUrl(url: string): { owner: string; repo: string } {
+  const cleaned = url.replace(/\.git$/, '').replace(/\/$/, '');
+  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) throw new Error('Invalid GitHub repository URL');
+  
+  // Ensure it's not a subdomain or different domain containing the string
+  const urlObj = new URL(url);
+  if (urlObj.hostname !== 'github.com' && urlObj.hostname !== 'www.github.com') {
+    throw new Error('Invalid GitHub repository URL');
+  }
+  
+  return { owner: match[1], repo: match[2] };
+}
