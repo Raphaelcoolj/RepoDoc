@@ -63,7 +63,7 @@ export default async function LandingPage() {
             {session?.user ? 'Go to Dashboard →' : 'Get started free →'}
           </Link>
           <a
-            href="https://github.com"
+            href="https://github.com/Raphaelcoolj/RepoDoc.git"
             target="_blank"
             rel="noopener noreferrer"
             className="glass hover:glow-border text-slate-300 px-8 py-3.5 rounded-xl font-medium text-base transition-all"
