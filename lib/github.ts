@@ -3,8 +3,8 @@ import path from 'path';
 import os from 'os';
 import axios from 'axios';
 import AdmZip from 'adm-zip';
+import { canonicalizeRepoUrl } from './repoUrl';
 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // optional, for higher rate limits
 const MAX_CONTENT_BYTES = 50 * 1024; // 50 KB
 const MAX_FILES_PATH_B = 30;
 const SINGLE_FILE_MAX_BYTES = 10 * 1024; // 10 KB
@@ -28,9 +28,10 @@ export interface RepoFileData {
   keyFiles: Record<string, string>;
 }
 
-function githubHeaders(): Record<string, string> {
+export function githubHeaders(): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json' };
-  if (GITHUB_TOKEN) headers['Authorization'] = `Bearer ${GITHUB_TOKEN}`;
+  const token = process.env.GITHUB_TOKEN;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;
 }
 
@@ -40,7 +41,7 @@ function isAllowedFile(filename: string): boolean {
   return ALLOWED_EXTENSIONS.has(ext);
 }
 
-function truncateIfNeeded(content: string, filepath: string): string {
+function truncateIfNeeded(content: string): string {
   const bytes = Buffer.byteLength(content, 'utf8');
   if (bytes > SINGLE_FILE_MAX_BYTES) {
     return content.slice(0, SINGLE_FILE_MAX_BYTES) + '\n[truncated]';
@@ -91,7 +92,7 @@ async function fetchViaZip(owner: string, repo: string, branch: string): Promise
       if (!isAllowedFile(filename)) continue;
 
       const content = entry.getData().toString('utf8');
-      keyFiles[relativePath] = truncateIfNeeded(content, relativePath);
+      keyFiles[relativePath] = truncateIfNeeded(content);
     }
 
     return {
@@ -109,8 +110,8 @@ async function fetchViaZip(owner: string, repo: string, branch: string): Promise
 }
 
 // ─── Path B: Trees API + selective fetch ──────────────────────────────────────
-async function fetchViaTreesApi(owner: string, repo: string, branch: string): Promise<RepoFileData> {
-  const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`;
+async function fetchViaTreesApi(owner: string, repo: string, ref: string): Promise<RepoFileData> {
+  const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(ref)}?recursive=1`;
   const treeRes = await axios.get<{
     tree: Array<{ path: string; type: string; size?: number }>;
   }>(treeUrl, { headers: githubHeaders() });
@@ -141,12 +142,12 @@ async function fetchViaTreesApi(owner: string, repo: string, branch: string): Pr
   await Promise.allSettled(
     selected.map(async (filePath) => {
       try {
-        const contentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`;
+        const contentUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${encodeURIComponent(ref)}`;
         const res = await axios.get<{ content: string; encoding: string }>(contentUrl, {
           headers: githubHeaders(),
         });
         const content = Buffer.from(res.data.content, 'base64').toString('utf8');
-        const truncated = truncateIfNeeded(content, filePath);
+        const truncated = truncateIfNeeded(content);
         const bytes = Buffer.byteLength(truncated, 'utf8');
         if (totalBytes + bytes <= MAX_CONTENT_BYTES) {
           keyFiles[filePath] = truncated;
@@ -165,12 +166,74 @@ async function fetchViaTreesApi(owner: string, repo: string, branch: string): Pr
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
-export async function fetchRepoFiles(owner: string, repo: string): Promise<RepoFileData> {
-  const metaRes = await axios.get<{ size: number; default_branch: string }>(
-    `https://api.github.com/repos/${owner}/${repo}`,
-    { headers: githubHeaders() }
+export interface ResolvedRepo {
+  repoId: number;
+  owner: string;
+  repo: string;
+  repoKey: string;
+  defaultBranch: string;
+  sizeKb: number;
+}
+
+export async function resolveRepo(owner: string, repo: string): Promise<ResolvedRepo> {
+  const res = await axios.get<{
+    id: number;
+    full_name: string;
+    default_branch: string;
+    size: number;
+  }>(`https://api.github.com/repos/${owner}/${repo}`, { headers: githubHeaders() });
+
+  const fullName = res.data.full_name;
+  const slash = fullName.indexOf('/');
+  const canonicalOwner = fullName.slice(0, slash);
+  const canonicalRepo = fullName.slice(slash + 1);
+
+  return {
+    repoId: res.data.id,
+    owner: canonicalOwner,
+    repo: canonicalRepo,
+    repoKey: fullName.toLowerCase(),
+    defaultBranch: res.data.default_branch,
+    sizeKb: res.data.size,
+  };
+}
+
+export async function fetchHeadCommitSha(
+  owner: string,
+  repo: string,
+  branch: string
+): Promise<string> {
+  const res = await axios.get<string>(
+    `https://api.github.com/repos/${owner}/${repo}/commits/${encodeURIComponent(branch)}`,
+    {
+      headers: { ...githubHeaders(), Accept: 'application/vnd.github.sha' },
+      responseType: 'text',
+      transformResponse: [(data: string) => data],
+    }
   );
-  const { size, default_branch: branch } = metaRes.data;
+  const sha = String(res.data).trim();
+  if (!/^[0-9a-f]{40}$/i.test(sha)) {
+    throw new Error('Unexpected commit sha response from GitHub');
+  }
+  return sha;
+}
+
+export async function fetchRepoFiles(
+  owner: string,
+  repo: string,
+  opts: { ref?: string; sizeKb?: number } = {}
+): Promise<RepoFileData> {
+  let size = opts.sizeKb;
+  let branch = opts.ref;
+
+  if (size === undefined || branch === undefined) {
+    const metaRes = await axios.get<{ size: number; default_branch: string }>(
+      `https://api.github.com/repos/${owner}/${repo}`,
+      { headers: githubHeaders() }
+    );
+    size = size ?? metaRes.data.size;
+    branch = branch ?? metaRes.data.default_branch;
+  }
 
   if (size < SIZE_GATE_KB) {
     return fetchViaZip(owner, repo, branch);
@@ -180,15 +243,6 @@ export async function fetchRepoFiles(owner: string, repo: string): Promise<RepoF
 }
 
 export function parseRepoUrl(url: string): { owner: string; repo: string } {
-  const cleaned = url.replace(/\.git$/, '').replace(/\/$/, '');
-  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) throw new Error('Invalid GitHub repository URL');
-  
-  // Ensure it's not a subdomain or different domain containing the string
-  const urlObj = new URL(url);
-  if (urlObj.hostname !== 'github.com' && urlObj.hostname !== 'www.github.com') {
-    throw new Error('Invalid GitHub repository URL');
-  }
-  
-  return { owner: match[1], repo: match[2] };
+  const { owner, repo } = canonicalizeRepoUrl(url);
+  return { owner, repo };
 }

@@ -7,7 +7,6 @@ interface MongooseCache {
 
 // Extend NodeJS global to cache the mongoose connection across hot-reloads in dev
 declare global {
-  // eslint-disable-next-line no-var
   var _mongooseCache: MongooseCache | undefined;
 }
 

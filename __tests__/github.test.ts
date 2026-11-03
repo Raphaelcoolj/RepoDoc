@@ -1,4 +1,4 @@
-const { parseRepoUrl } = require('../lib/github');
+import { parseRepoUrl } from '../lib/github';
 
 describe('GitHub URL Parser', () => {
   test('should parse standard GitHub URLs', () => {

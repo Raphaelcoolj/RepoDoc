@@ -7,7 +7,29 @@
 ## Architecture Decisions
 
 ### Cache-First (Core Constraint)
-Every generation request checks MongoDB for an existing `GeneratedDoc` by `repoUrl` before invoking any AI or GitHub API. If a document exists, it is returned immediately — zero API calls, zero Cloudinary uploads. All users share the same cached document for any given repository.
+Every generation request checks MongoDB for an existing `GeneratedDoc` by `repoKey` (falling back to the durable `repoId` for renamed repos) before invoking any AI. If the cached doc is current, it is returned immediately — zero AI calls, zero Cloudinary uploads. All users share the same cached document for any given repository.
+
+### Freshness & Automatic Regeneration
+Cached docs are revalidated on every authenticated resubmit of the repository URL (no manual "regenerate" button):
+
+1. **Trigger evaluation** (`lib/freshness.ts`, `lib/significance.ts`) — GitHub `HEAD /commits/{branch}` with `If-None-Match` (ETag/304, cheap); on a moved head, `compare/{old}...{new}` classifies the change. Docs/lockfiles/tests/docs-only paths are ignored (`REGEN_MIN_SIGNIFICANT_FILES`, default 3). GitHub failures **fail open**: the cached doc is served untouched.
+2. **Lock** (`lib/docLock.ts`) — atomic `findOneAndUpdate` on `status != generating OR lockedAt < now − REGEN_LOCK_TTL_MINUTES` (default 10 min, must exceed the function duration). A busy lock returns `{ status: "regenerating" }` without running a pipeline.
+3. **Pipeline re-run** — same synchronous execution as initial generation: HEAD sha pinned *before* ingestion, files fetched at that ref, AI generation, then **validation gate** (`lib/docValidation.ts`: required sections, min length, balanced fences, Mermaid keyword/brackets, failure markers).
+4. **Versioned storage + atomic promote** (`lib/cloudinary.ts`, `lib/promote.ts`) — upload to `docs/{slug}/v{n}` with `overwrite: false`, then a single `findOneAndUpdate` bumps `version`, rotates `previousPublicIds` (keeps exactly current + 1), clears the lock/`lastError`/`failureCount`, and returns `status: "ready"`. Only after a successful promote does the public id that fell out of rotation get destroyed. On any failure the orphan upload is destroyed, `failureCount`/`lastError` (sanitized) are recorded, and the **old doc stays live** (`{ status: "stale", reason: "regeneration_failed" }`).
+
+`POST /api/generate` responses (discriminated union consumed by `RepoForm`):
+
+| `status` | Meaning |
+|---|---|
+| `created` | First generation for this repo |
+| `cached` | Doc is current (or GitHub is unreachable — fail open) |
+| `regenerated` | Fresh doc promoted; includes new `version` |
+| `regenerating` | Another request holds the lock |
+| `stale` | Regeneration failed; previous version still served |
+
+`GET /api/doc/[slug]/freshness` powers `DocFreshnessBanner` on the doc page: `up_to_date` / `behind` (+ `commitsBehind`) / `regenerating` / `unknown` / `source_unavailable`. It is read-only, fails open to `unknown`, and is cached for 30 s. The banner never offers a manual regenerate — resubmitting the repo URL is the only trigger.
+
+Cloudinary keeps at most **two** live versions per slug (current + previous); versions are never overwritten (`overwrite: false`), so a failed promote can never clobber the live doc.
 
 ### Hybrid GitHub Fetch Strategy
 | Condition | Strategy |
@@ -80,6 +102,13 @@ DEEPSEEK_API_KEY=
 # AES-256-CBC key (32-byte hex): openssl rand -hex 32
 ENCRYPTION_KEY=
 
+# GitHub API token (optional: raises rate limit from 60 to 5000 req/hr)
+GITHUB_TOKEN=
+
+# Freshness / regeneration tuning (optional)
+REGEN_LOCK_TTL_MINUTES=10    # lock staleness threshold (minutes)
+REGEN_MIN_SIGNIFICANT_FILES=3 # changed files needed to trigger regeneration
+
 # App
 NEXTAUTH_URL=
 ```
@@ -95,14 +124,18 @@ cd daas
 npm install
 
 # 2. Configure environment
-cp .env.local.example .env.local
+cp .env.example .env.local
 # Edit .env.local with your values
 
 # 3. Run development server
 npm run dev
 
-# 4. Run tests
+# 4. Run tests (spawns a temporary local `mongod` — must be on PATH)
 npm test
+
+# 5. Backfill freshness fields on an existing deployment (idempotent)
+node --experimental-strip-types scripts/migrate-regen-fields.ts --dry-run
+node --experimental-strip-types scripts/migrate-regen-fields.ts
 ```
 
 ---
@@ -130,7 +163,7 @@ npm test
 | Free | 3/day (resets via `freeDocsResetAt`) | Platform keys |
 | BYOK | Unlimited | Your own (encrypted at rest) |
 
-Payments and paid plans are deferred to a future phase. The schema already includes `freeDocsUsed` and `freeDocsResetAt` to support future rate limiting without a migration.
+A **free-tier credit is consumed when the AI call completes** — for initial generations and for regenerations alike — so failed regenerations cannot be retried in a loop to bypass the daily cap. Cache hits and insignificant-change checks never touch the quota. Payments and paid plans are deferred to a future phase.
 
 ---
 
@@ -139,8 +172,9 @@ Payments and paid plans are deferred to a future phase. The schema already inclu
 ```
 /app
   /api/auth/[...nextauth]  → Auth.js v5 route handler
-  /api/generate            → POST: doc generation pipeline
+  /api/generate            → POST: generation + freshness-triggered regeneration
   /api/doc                 → GET: fetch doc metadata by slug
+  /api/doc/[slug]/freshness → GET: freshness status for the banner (read-only)
   /api/keys                → CRUD: BYOK key management
   /api/onboarding          → POST: mark onboarding complete
   /dashboard               → Protected user dashboard
@@ -151,25 +185,39 @@ Payments and paid plans are deferred to a future phase. The schema already inclu
 
 /lib
   /ai.ts                   → Unified multi-model AI service
-  /cloudinary.ts           → Raw file upload/fetch
+  /cloudinary.ts           → Versioned raw upload (docs/{slug}/v{n}) / fetch / destroy
   /crypto.ts               → AES-256-CBC encrypt/decrypt
   /db.ts                   → MongoDB singleton connection
-  /github.ts               → Hybrid fetch strategy
+  /docLock.ts              → Atomic regeneration lock (acquire/release)
+  /docValidation.ts        → Deterministic output validation gate
+  /freshness.ts            → ETag/304 head check + change classification
+  /github.ts               → Hybrid fetch strategy (ref-pinned ingestion)
+  /promote.ts              → Atomic version promote + failure bookkeeping
+  /quota.ts                → Free-tier quota + BYOK key resolution
+  /repoUrl.ts              → Canonical GitHub URL parsing
+  /significance.ts         → Ignore lists + significance threshold
+  /pipelineVersion.ts      → PIPELINE_VERSION constant
 
 /models
   /User.ts                 → User schema (BYOK keys, rate limiting)
-  /GeneratedDoc.ts         → Doc metadata schema
+  /GeneratedDoc.ts         → Doc schema (freshness, lock, version rotation)
 
 /components
+  /DocFreshnessBanner.tsx  → Freshness/regeneration banner (client)
   /DocReader.tsx           → Markdown + Mermaid renderer (client)
   /RepoForm.tsx            → Repo URL submission form (client)
   /KeySettings.tsx         → BYOK key management UI (client)
+
+/scripts
+  /migrate-regen-fields.ts → Idempotent backfill for existing deployments
 
 /types
   /next-auth.d.ts          → Session type augmentation
 
 /__tests__
-  /generate.test.ts        → Integration tests for generation pipeline
+  → unit suites (parsing, significance, validation, lock, promote)
+  → route suites (generate, regeneration orchestration, freshness API)
+  → regen.integration.test.ts (real local mongod: races, locks, rotation)
 ```
 
 ---

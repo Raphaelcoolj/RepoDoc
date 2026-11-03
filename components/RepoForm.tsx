@@ -2,10 +2,24 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface Props {
   freeRemaining: number;
   hasByok: boolean;
+}
+
+type GenerateResponse =
+  | { status: 'created'; slug: string; cached: false }
+  | { status: 'cached'; slug: string; cached: true }
+  | { status: 'regenerated'; slug: string; version: number; cached: false }
+  | { status: 'regenerating'; slug: string }
+  | { status: 'stale'; slug: string; reason: string }
+  | { error: string; limitReached?: boolean };
+
+interface Notice {
+  message: string;
+  slug: string;
 }
 
 function isValidGithubUrl(url: string): boolean {
@@ -17,6 +31,7 @@ export default function RepoForm({ freeRemaining, hasByok }: Props) {
   const [url, setUrl] = useState('');
   const [status, setStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [phase, setPhase] = useState('');
 
   const canGenerate = hasByok || freeRemaining > 0;
@@ -48,6 +63,7 @@ export default function RepoForm({ freeRemaining, hasByok }: Props) {
 
     setStatus('loading');
     setErrorMsg('');
+    setNotice(null);
 
     // Cycle through loading phases for UX
     let phaseIdx = 0;
@@ -66,16 +82,43 @@ export default function RepoForm({ freeRemaining, hasByok }: Props) {
 
       clearInterval(phaseInterval);
 
-      const data = await res.json() as { slug?: string; error?: string; limitReached?: boolean };
+      const data = (await res.json()) as GenerateResponse;
 
-      if (!res.ok) {
-        setErrorMsg(data.error ?? 'Generation failed. Please try again.');
+      if ('error' in data) {
+        setErrorMsg(data.error || 'Generation failed. Please try again.');
         setStatus('error');
         return;
       }
 
-      if (data.slug) {
-        router.push(`/doc/${data.slug}`);
+      if (!res.ok) {
+        setErrorMsg('Generation failed. Please try again.');
+        setStatus('error');
+        return;
+      }
+
+      switch (data.status) {
+        case 'created':
+        case 'cached':
+        case 'regenerated':
+          router.push(`/doc/${data.slug}`);
+          return;
+        case 'regenerating':
+          setStatus('idle');
+          setNotice({
+            message: 'A regeneration for this repository is already in progress.',
+            slug: data.slug,
+          });
+          return;
+        case 'stale':
+          setStatus('idle');
+          setNotice({
+            message: 'Regeneration failed — showing the previous version.',
+            slug: data.slug,
+          });
+          return;
+        default:
+          setErrorMsg('Unexpected response from server.');
+          setStatus('error');
       }
     } catch {
       clearInterval(phaseInterval);
@@ -97,7 +140,7 @@ export default function RepoForm({ freeRemaining, hasByok }: Props) {
             id="repo-url"
             type="url"
             value={url}
-            onChange={(e) => { setUrl(e.target.value); setStatus('idle'); setErrorMsg(''); }}
+            onChange={(e) => { setUrl(e.target.value); setStatus('idle'); setErrorMsg(''); setNotice(null); }}
             placeholder="https://github.com/owner/repository"
             className="w-full bg-[#16162a] border border-[#2a2a48] focus:border-brand-500 text-slate-200 placeholder:text-slate-600 rounded-xl pl-11 pr-4 py-3.5 text-sm focus:outline-none transition-colors"
             disabled={status === 'loading'}
@@ -133,6 +176,19 @@ export default function RepoForm({ freeRemaining, hasByok }: Props) {
       {status === 'error' && errorMsg && (
         <div className="bg-red-900/20 border border-red-500/30 rounded-xl px-4 py-3">
           <p className="text-sm text-red-400">{errorMsg}</p>
+        </div>
+      )}
+
+      {/* Notice (regenerating / stale) */}
+      {notice && (
+        <div className="bg-sky-900/20 border border-sky-500/30 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+          <p className="text-sm text-sky-300">{notice.message}</p>
+          <Link
+            href={`/doc/${notice.slug}`}
+            className="text-sm text-brand-400 hover:text-brand-300 whitespace-nowrap"
+          >
+            View docs →
+          </Link>
         </div>
       )}
 

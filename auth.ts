@@ -104,5 +104,9 @@ const nextAuth = NextAuth({
 export const handlers = nextAuth.handlers;
 export const auth = nextAuth.auth;
 // Explicitly wrap signIn and signOut to avoid proxy/apply issues in Next 16
-export const signIn: typeof nextAuth.signIn = (...args: any[]) => nextAuth.signIn(...args);
-export const signOut: typeof nextAuth.signOut = (...args: any[]) => nextAuth.signOut(...args);
+export const signIn: typeof nextAuth.signIn = (
+  ...args: Parameters<typeof nextAuth.signIn>
+) => nextAuth.signIn(...args);
+export const signOut: typeof nextAuth.signOut = (
+  ...args: Parameters<typeof nextAuth.signOut>
+) => nextAuth.signOut(...args);

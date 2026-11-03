@@ -29,7 +29,6 @@ export default function KeySettings() {
   const [freeDocsUsed, setFreeDocsUsed] = useState(0);
 
   const fetchKeys = useCallback(async () => {
-    setFetching(true);
     try {
       const res = await fetch('/api/keys');
       const data = await res.json() as KeysResponse;

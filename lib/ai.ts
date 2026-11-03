@@ -103,8 +103,12 @@ async function runGemini(params: {
     try {
       const result = await model.generateContent(fullPrompt);
       return result.response.text();
-    } catch (e: any) {
-      if (e.status === 429 && attempts === 0) {
+    } catch (e) {
+      const status =
+        typeof e === 'object' && e !== null && 'status' in e
+          ? (e as { status?: unknown }).status
+          : undefined;
+      if (status === 429 && attempts === 0) {
         await new Promise(r => setTimeout(r, 3000));
         attempts++;
         continue;

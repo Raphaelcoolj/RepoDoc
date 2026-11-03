@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import mermaid from 'mermaid';
@@ -151,7 +151,10 @@ export default function DocReader({ cloudinaryUrl }: Props) {
           },
           // Override pre to avoid double-wrapping mermaid blocks
           pre({ children, ...props }) {
-            const isMermaid = (children as any)?.props?.className?.includes('language-mermaid');
+            const className = isValidElement(children)
+              ? (children.props as { className?: string }).className
+              : undefined;
+            const isMermaid = typeof className === 'string' && className.includes('language-mermaid');
             if (isMermaid) return <>{children}</>;
             return <pre {...props}>{children}</pre>;
           },

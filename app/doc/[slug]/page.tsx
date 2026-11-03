@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import DocReader from '@/components/DocReader';
+import DocFreshnessBanner from '@/components/DocFreshnessBanner';
 import { connectDB } from '@/lib/db';
 import GeneratedDocModel from '@/models/GeneratedDoc';
 import type { Metadata } from 'next';
@@ -42,9 +44,9 @@ export default async function DocPage({ params }: Props) {
     <main className="min-h-screen">
       {/* Top bar */}
       <nav className="glass sticky top-0 z-50 px-4 md:px-6 py-3.5 flex items-center justify-between">
-        <a href="/" className="text-lg font-bold gradient-text">
+        <Link href="/" className="text-lg font-bold gradient-text">
           RepoDoc
-        </a>
+        </Link>
         <div className="flex items-center gap-4 text-sm overflow-hidden">
           <a
             href={doc.repoUrl}
@@ -76,6 +78,8 @@ export default async function DocPage({ params }: Props) {
             </a>
           </div>
         </div>
+
+        <DocFreshnessBanner slug={doc.slug} />
 
         <DocReader cloudinaryUrl={doc.cloudinaryUrl} />
       </div>
