@@ -1,4 +1,4 @@
-# RepoDoc
+# GramDoc
 
 **Documentation-as-a-Service platform** — paste a GitHub repository URL, get instant AI-generated documentation with Mermaid.js architecture diagrams and plain-English code explanations.
 
@@ -120,7 +120,7 @@ NEXTAUTH_URL=
 ```bash
 # 1. Clone and install
 git clone <repo>
-cd daas
+cd RepoDoc
 npm install
 
 # 2. Configure environment

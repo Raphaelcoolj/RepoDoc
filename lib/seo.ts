@@ -1,7 +1,7 @@
-export const SITE_NAME = 'RepoDoc';
-export const SITE_TITLE = 'RepoDoc — AI-Powered Repository Documentation';
+export const SITE_NAME = 'GramDoc';
+export const SITE_TITLE = 'GramDoc — AI-Powered Repository Documentation';
 export const SITE_DESCRIPTION =
-  'Paste a GitHub URL. Get instant, AI-generated documentation with Mermaid architecture diagrams and plain-English code explanations.';
+  'GramDoc — paste a GitHub URL and get instant, AI-generated documentation with Mermaid architecture diagrams and plain-English code explanations.';
 export const SITE_URL = 'https://github.com/Raphaelcoolj/RepoDoc';
 
 export function getBaseUrl(): string {

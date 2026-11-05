@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'RepoDoc — AI-Powered Repository Documentation';
+export const alt = 'GramDoc — AI-Powered Repository Documentation';
 export const size = {
   width: 1200,
   height: 630,
@@ -83,7 +83,7 @@ export default function Image() {
             color: '#ffffff',
           }}
         >
-          RepoDoc
+          GramDoc
         </div>
       </div>
     ),

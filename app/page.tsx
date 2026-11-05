@@ -43,7 +43,7 @@ export default async function LandingPage() {
       />
       {/* Nav */}
       <nav className="glass sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-        <span className="text-xl font-bold gradient-text">RepoDoc</span>
+        <span className="text-xl font-bold gradient-text">GramDoc</span>
         <div className="flex items-center gap-4">
           {session?.user ? (
             <>
@@ -85,7 +85,7 @@ export default async function LandingPage() {
         </h1>
 
         <p className="mt-6 text-lg md:text-xl text-slate-400 max-w-2xl leading-relaxed">
-          Paste a repository URL. RepoDoc analyzes the codebase using multiple
+          Paste a repository URL. GramDoc analyzes the codebase using multiple
           AI models and generates structured documentation with Mermaid.js
           architecture diagrams — in seconds.
         </p>
@@ -152,7 +152,7 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-[#2a2a48] px-6 py-6 text-center text-sm text-slate-500">
-        © {new Date().getFullYear()} RepoDoc. Documentation-as-a-Service. Built
+        © {new Date().getFullYear()} GramDoc. Documentation-as-a-Service. Built
         by{' '}
         <a
           href="https://spherebrilliq.online"

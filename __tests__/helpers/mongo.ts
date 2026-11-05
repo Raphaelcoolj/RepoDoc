@@ -77,7 +77,7 @@ function resetConnectDbCache(): void {
 
 export async function startMongo(): Promise<string> {
   const port = await freePort();
-  dbPath = fs.mkdtempSync(path.join(os.tmpdir(), 'repodoc-mongo-'));
+  dbPath = fs.mkdtempSync(path.join(os.tmpdir(), 'gramdoc-mongo-'));
 
   proc = spawn(
     'mongod',
@@ -108,7 +108,7 @@ export async function startMongo(): Promise<string> {
   const ready = waitForPort(port);
   await Promise.race([ready, startupFailure]);
 
-  const uri = `mongodb://127.0.0.1:${port}/repodoc-tests`;
+  const uri = `mongodb://127.0.0.1:${port}/gramdoc-tests`;
   process.env.MONGODB_URI = uri;
   if (mongoose.connection.readyState !== 0) {
     await mongoose.disconnect();

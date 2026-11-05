@@ -11,7 +11,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {/* Top bar */}
       <header className="glass sticky top-0 z-50 px-6 py-3.5 flex items-center justify-between">
         <Link href="/dashboard" className="text-lg font-bold gradient-text">
-          RepoDoc
+          GramDoc
         </Link>
 
         <nav className="hidden md:flex items-center gap-6 text-sm">

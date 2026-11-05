@@ -76,7 +76,7 @@ describe('Doc Generation Pipeline Integration', () => {
       slug: 'cached-slug',
       repoUrl: 'https://github.com/o/r',
       repoKey: 'o/r',
-      cloudinaryUrl: 'https://res.cloudinary.com/demo/raw/upload/v1/repodoc/repodoc/cached-slug',
+      cloudinaryUrl: 'https://res.cloudinary.com/demo/raw/upload/v1/gramdoc/gramdoc/cached-slug',
     };
     (GeneratedDocModel.findOne as jest.Mock).mockReturnValue(leanResult(existingDoc));
 
@@ -96,7 +96,7 @@ describe('Doc Generation Pipeline Integration', () => {
       slug: 'renamed-slug',
       repoUrl: 'https://github.com/new-owner/r',
       repoKey: 'new-owner/r',
-      cloudinaryUrl: 'https://res.cloudinary.com/demo/raw/upload/v1/repodoc/repodoc/renamed-slug',
+      cloudinaryUrl: 'https://res.cloudinary.com/demo/raw/upload/v1/gramdoc/gramdoc/renamed-slug',
     };
     (GeneratedDocModel.findOne as jest.Mock).mockImplementation(
       (query: Record<string, unknown>) =>

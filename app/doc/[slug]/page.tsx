@@ -105,7 +105,7 @@ export default async function DocPage({ params }: Props) {
       {/* Top bar */}
       <nav className="glass sticky top-0 z-50 px-4 md:px-6 py-3.5 flex items-center justify-between">
         <Link href="/" className="text-lg font-bold gradient-text">
-          RepoDoc
+          GramDoc
         </Link>
         <div className="flex items-center gap-4 text-sm overflow-hidden">
           <a

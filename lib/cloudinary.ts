@@ -17,7 +17,7 @@ export async function uploadMarkdown(
   const result = await cloudinary.uploader.upload(dataUri, {
     public_id: publicId,
     resource_type: 'raw',
-    folder: 'repodoc',
+    folder: 'gramdoc',
     overwrite: true,
   });
 

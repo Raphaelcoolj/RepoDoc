@@ -70,7 +70,7 @@ function guardRate(): void {
 async function ghGet<T>(path: string): Promise<GhResult<T>> {
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'repodoc-migration',
+    'User-Agent': 'gramdoc-migration',
   };
   const token = process.env.GITHUB_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;

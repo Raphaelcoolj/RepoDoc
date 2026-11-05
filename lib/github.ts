@@ -69,7 +69,7 @@ async function fetchViaZip(owner: string, repo: string, branch: string): Promise
     responseType: 'arraybuffer',
   });
 
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repodoc-'));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gramdoc-'));
   const zipPath = path.join(tmpDir, 'repo.zip');
 
   try {
