@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { sanitizeMermaidDiagram } from '@/lib/mermaid';
 
 export interface AiInput {
   fileTree: string;
@@ -577,6 +578,10 @@ ${fileContext}`
           
           // Clean up prefixes
           extractedMermaid = extractedMermaid.replace(/^mermaid\s+/i, '').trim();
+
+          // Repair common AI diagram breakage (bad node ids, unquoted labels,
+          // markdown junk) so the rendered diagram does not throw parse errors.
+          extractedMermaid = sanitizeMermaidDiagram(extractedMermaid);
           
           // Ensure the reasoning doesn't contain the raw diagram
           let architectureReasoning = text;

@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import mermaid from 'mermaid';
 import { fixMarkdownTables } from '@/lib/markdown';
+import { sanitizeMermaidDiagram } from '@/lib/mermaid';
 
 interface Props {
   cloudinaryUrl: string;
@@ -41,9 +42,19 @@ function MermaidDiagram({ chart }: { chart: string }) {
     mermaid
       .render(id, chart)
       .then(({ svg: renderedSvg }) => setSvg(renderedSvg))
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : 'Diagram error';
-        setError(msg);
+      .catch(() => {
+        // Retry once with a repaired diagram (bad ids, unquoted labels, …)
+        const repaired = sanitizeMermaidDiagram(chart);
+        if (repaired && repaired !== chart) {
+          mermaid
+            .render(`mermaid-${++mermaidCounter}`, repaired)
+            .then(({ svg: renderedSvg }) => setSvg(renderedSvg))
+            .catch((e: unknown) => {
+              setError(e instanceof Error ? e.message : 'Diagram error');
+            });
+        } else {
+          setError('Diagram could not be rendered');
+        }
       });
   }, [chart]);
 
@@ -51,8 +62,10 @@ function MermaidDiagram({ chart }: { chart: string }) {
     return (
       <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 text-xs text-red-400">
         <p className="font-medium mb-1">Diagram render error</p>
-        <pre className="whitespace-pre-wrap opacity-70">{error}</pre>
-        <pre className="mt-2 text-slate-500 whitespace-pre-wrap">{chart}</pre>
+        <details className="mt-2">
+          <summary className="cursor-pointer text-slate-400">Show diagram source</summary>
+          <pre className="mt-2 text-slate-500 whitespace-pre-wrap">{chart}</pre>
+        </details>
       </div>
     );
   }
