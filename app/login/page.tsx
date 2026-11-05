@@ -15,8 +15,8 @@ export default async function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center hero-glow px-4">
-      <div className="glass rounded-3xl p-10 w-full max-w-md text-center glow-border">
-        <h1 className="text-3xl font-black gradient-text mb-2">Welcome to GramDoc</h1>
+      <div className="glass rounded-3xl p-6 sm:p-10 w-full max-w-md text-center glow-border">
+        <h1 className="text-2xl sm:text-3xl font-black gradient-text mb-2">Welcome to GramDoc</h1>
         <p className="text-slate-400 text-sm mb-10">
           Sign in to start generating documentation for any public GitHub repo.
         </p>

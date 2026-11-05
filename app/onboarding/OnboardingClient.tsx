@@ -3,8 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-const PROVIDERS = ['openai', 'anthropic', 'grok', 'gemini', 'deepseek'] as const;
+const PROVIDERS = ['groq', 'openai', 'anthropic', 'grok', 'gemini', 'deepseek'] as const;
 type ProviderName = typeof PROVIDERS[number];
+
+const PROVIDER_LABELS: Record<ProviderName, string> = {
+  groq: 'Groq',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  grok: 'Grok (xAI)',
+  gemini: 'Gemini (Google)',
+  deepseek: 'DeepSeek',
+};
 
 interface Slot {
   name: ProviderName | '';
@@ -71,7 +80,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
   return (
     <div className="space-y-6">
       {[0, 1].map((idx) => (
-        <div key={idx} className="bg-[#1e1e38]/60 rounded-2xl p-6 border border-[#2a2a48]">
+        <div key={idx} className="bg-[#1e1e38]/60 rounded-2xl p-4 sm:p-6 border border-[#2a2a48]">
           <p className="text-sm font-medium text-slate-300 mb-4">
             API Key Slot {idx + 1}
           </p>
@@ -86,7 +95,7 @@ export default function OnboardingClient({ userId }: { userId: string }) {
                 <option value="">Select provider...</option>
                 {PROVIDERS.map((p) => (
                   <option key={p} value={p}>
-                    {p.charAt(0).toUpperCase() + p.slice(1)}
+                    {PROVIDER_LABELS[p]}
                   </option>
                 ))}
               </select>
@@ -111,18 +120,18 @@ export default function OnboardingClient({ userId }: { userId: string }) {
         </p>
       )}
 
-      <div className="flex gap-3 justify-end pt-2">
+      <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-2">
         <button
           onClick={handleSkip}
           disabled={saving}
-          className="px-6 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+          className="w-full sm:w-auto px-6 py-2.5 rounded-lg text-sm text-slate-400 hover:text-white transition-colors disabled:opacity-50"
         >
           Skip for now
         </button>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-7 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-lg text-sm font-medium transition-all disabled:opacity-50 hover:scale-[1.02]"
+          className="w-full sm:w-auto px-7 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-lg text-sm font-medium transition-all disabled:opacity-50 hover:scale-[1.02]"
         >
           {saving ? 'Saving...' : 'Save & Continue →'}
         </button>

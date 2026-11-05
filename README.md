@@ -40,14 +40,14 @@ Cloudinary keeps at most **two** live versions per slug (current + previous); ve
 Both paths cap total AI input at **50 KB** and truncate single files over **10 KB** with a `[truncated]` marker.
 
 ### Multi-Model AI Routing
-Each subtask is assigned to a primary provider with a robust fallback chain:
+Each subtask is assigned to a primary provider with a robust fallback chain. Groq leads every chain (BYOK key first, otherwise the server `GROQ_API_KEY`), and any provider without a configured key is skipped instead of failing over. Mistral is paid-only on their site, so it sits at the end of each chain until a paid key is added.
 
 | Task | Primary | Fallback Chain |
 |---|---|---|
-| Project Overview | Gemini 2.0 Flash | Groq (LLaMA 3.1) → Mistral |
-| Structure Analysis | Groq (LLaMA 3.1) | xAI (Grok) → Gemini |
-| Function Breakdowns | Groq (LLaMA 3.1) | OpenAI (GPT-4o-mini) → DeepSeek → Hugging Face |
-| Architecture + Mermaid | Mistral (7B) | Anthropic (Haiku) → Groq |
+| Project Overview | Groq (GPT-OSS 120B) | Gemini 2.0 Flash → Mistral |
+| Structure Analysis | Groq (GPT-OSS 120B) | Gemini 2.0 Flash → xAI (Grok) → Mistral |
+| Function Breakdowns | Groq (GPT-OSS 120B) | DeepSeek → OpenAI (GPT-4o-mini) → Hugging Face → Mistral |
+| Architecture + Mermaid | Groq (GPT-OSS 120B) | Gemini 2.0 Flash → Anthropic (Haiku) → Mistral |
 
 All AI calls are server-side only. Provider keys never reach the client.
 

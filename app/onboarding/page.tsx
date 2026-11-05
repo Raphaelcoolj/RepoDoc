@@ -21,10 +21,10 @@ export default async function OnboardingPage() {
   if (dbUser?.onboardingComplete) redirect('/dashboard');
 
   return (
-    <main className="min-h-screen flex items-center justify-center hero-glow px-4 py-12">
-      <div className="glass rounded-3xl p-10 w-full max-w-2xl glow-border">
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-black gradient-text mb-2">Welcome to GramDoc 👋</h1>
+    <main className="min-h-screen flex items-center justify-center hero-glow px-4 py-8 sm:py-12">
+      <div className="glass rounded-3xl p-6 sm:p-10 w-full max-w-2xl glow-border">
+        <div className="text-center mb-8 sm:mb-10">
+          <h1 className="text-2xl sm:text-3xl font-black gradient-text mb-2">Welcome to GramDoc 👋</h1>
           <p className="text-slate-400 text-sm leading-relaxed max-w-md mx-auto">
             You can optionally add up to 2 of your own AI provider API keys for
             unlimited documentation generations. This step is completely optional — you

@@ -2,8 +2,17 @@
 
 import { useEffect, useState, useCallback } from 'react';
 
-const PROVIDERS = ['openai', 'anthropic', 'grok', 'gemini', 'deepseek'] as const;
+const PROVIDERS = ['groq', 'openai', 'anthropic', 'grok', 'gemini', 'deepseek'] as const;
 type ProviderName = typeof PROVIDERS[number];
+
+const PROVIDER_LABELS: Record<ProviderName, string> = {
+  groq: 'Groq',
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  grok: 'Grok (xAI)',
+  gemini: 'Gemini (Google)',
+  deepseek: 'DeepSeek',
+};
 
 interface KeysResponse {
   keys: { provider1: ProviderName | null; provider2: ProviderName | null };
@@ -21,6 +30,10 @@ interface SlotState {
 
 function initSlot(): SlotState {
   return { name: '', key: '', saved: false, loading: false, error: '' };
+}
+
+function providerLabel(name: ProviderName | ''): string {
+  return name ? PROVIDER_LABELS[name] : '';
 }
 
 export default function KeySettings() {
@@ -128,8 +141,8 @@ export default function KeySettings() {
         const slot = slots[idx];
         const slotLabel = `API Key Slot ${idx + 1}`;
         return (
-          <div key={idx} className="bg-[#1e1e38] rounded-2xl p-6 border border-[#2a2a48]">
-            <div className="flex items-center justify-between mb-4">
+          <div key={idx} className="bg-[#1e1e38] rounded-2xl p-4 sm:p-6 border border-[#2a2a48]">
+            <div className="flex items-center justify-between gap-3 mb-4">
               <p className="text-sm font-medium text-slate-300">{slotLabel}</p>
               {slot.saved && (
                 <span className="text-xs text-green-400 bg-green-400/10 px-2.5 py-1 rounded-full">
@@ -139,12 +152,12 @@ export default function KeySettings() {
             </div>
 
             {slot.saved ? (
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white font-medium capitalize">{slot.name}</p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-white font-medium">{providerLabel(slot.name)}</p>
                   <p className="text-xs text-slate-500 mt-0.5">Key saved and encrypted</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => updateSlot(idx as 0 | 1, 'saved', false)}
                     className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-[#2a2a48] hover:border-[#4a4a68] transition-colors"
@@ -173,7 +186,7 @@ export default function KeySettings() {
                       <option value="">Select provider…</option>
                       {PROVIDERS.map((p) => (
                         <option key={p} value={p}>
-                          {p.charAt(0).toUpperCase() + p.slice(1)}
+                          {PROVIDER_LABELS[p]}
                         </option>
                       ))}
                     </select>

@@ -181,8 +181,8 @@ export default function RepoForm({ freeRemaining, hasByok }: Props) {
 
       {/* Notice (regenerating / stale) */}
       {notice && (
-        <div className="bg-sky-900/20 border border-sky-500/30 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
-          <p className="text-sm text-sky-300">{notice.message}</p>
+        <div className="bg-sky-900/20 border border-sky-500/30 rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p className="text-sm text-sky-300 min-w-0">{notice.message}</p>
           <Link
             href={`/doc/${notice.slug}`}
             className="text-sm text-brand-400 hover:text-brand-300 whitespace-nowrap"

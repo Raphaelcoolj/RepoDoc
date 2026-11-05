@@ -4,7 +4,7 @@ import { connectDB } from '@/lib/db';
 import UserModel from '@/models/User';
 import { encrypt, decrypt } from '@/lib/crypto';
 
-const ALLOWED_PROVIDERS = ['openai', 'anthropic', 'grok', 'gemini', 'deepseek'] as const;
+const ALLOWED_PROVIDERS = ['groq', 'openai', 'anthropic', 'grok', 'gemini', 'deepseek'] as const;
 type ProviderName = typeof ALLOWED_PROVIDERS[number];
 
 export async function GET(): Promise<NextResponse> {

@@ -87,8 +87,8 @@ export default async function DashboardPage() {
       )}
 
       {/* Repo form */}
-      <div className="glass rounded-2xl p-8">
-        <h2 className="text-xl font-bold text-white mb-4">Generate Documentation</h2>
+      <div className="glass rounded-2xl p-5 sm:p-8">
+        <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Generate Documentation</h2>
         <RepoForm freeRemaining={freeRemaining} hasByok={hasByok} />
       </div>
 
@@ -96,12 +96,12 @@ export default async function DashboardPage() {
       <div>
         <h2 className="text-xl font-bold text-white mb-4">Your Documents</h2>
         {docs.length === 0 ? (
-          <div className="glass rounded-2xl p-12 text-center">
+          <div className="glass rounded-2xl p-8 sm:p-12 text-center">
             <p className="text-4xl mb-4">📄</p>
             <p className="text-slate-400">No documents yet. Generate your first one above!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {docs.map((doc) => (
               <Link
                 key={doc.slug}

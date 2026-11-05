@@ -18,13 +18,39 @@ export interface AiOutput {
 
 type ProviderName = 'openai' | 'anthropic' | 'xai' | 'google' | 'deepseek' | 'groq' | 'mistral' | 'huggingface';
 
+// BYOK keys are stored under the labels offered in the UI ("grok", "gemini", …)
+// while the runner below uses canonical ids ("xai", "google"). Without this map
+// user-supplied keys never resolve and every section silently fails over.
+const PROVIDER_ALIASES: Record<string, ProviderName> = {
+  openai: 'openai',
+  gpt: 'openai',
+  anthropic: 'anthropic',
+  claude: 'anthropic',
+  xai: 'xai',
+  grok: 'xai',
+  google: 'google',
+  gemini: 'google',
+  deepseek: 'deepseek',
+  groq: 'groq',
+  mistral: 'mistral',
+  huggingface: 'huggingface',
+  hf: 'huggingface',
+};
+
+function canonicalProvider(name: string): string {
+  const key = name.trim().toLowerCase();
+  return PROVIDER_ALIASES[key] ?? key;
+}
+
 function resolveKey(
   provider: ProviderName,
   userApiKeys?: { name: string; key: string }[]
 ): string {
   // 1. Check BYOK (only return if key actually has a value)
   if (userApiKeys) {
-    const match = userApiKeys.find((k) => k.name === provider);
+    const match = userApiKeys.find(
+      (k) => canonicalProvider(k.name) === canonicalProvider(provider)
+    );
     if (match && match.key && match.key.trim() !== '') {
       return match.key;
     }
@@ -63,6 +89,11 @@ function buildFileContext(keyFiles: Record<string, string>): string {
 }
 
 // ─── OpenAI Compatible ──────────────────────────
+const GROQ_BASE_URL = 'https://api.groq.com/openai/v1';
+// `llama-3.3-70b-versatile` was retired on Groq (2026-08-16) and now 404s on
+// the free tier — GPT-OSS 120B is Groq's published replacement.
+const GROQ_MODEL = 'openai/gpt-oss-120b';
+
 async function runOpenAICompatible(params: {
   provider: ProviderName;
   apiKey: string;
@@ -70,11 +101,15 @@ async function runOpenAICompatible(params: {
   system: string;
   prompt: string;
   baseURL?: string;
+  maxTokens?: number;
+  tokenBudgetField?: 'max_tokens' | 'max_completion_tokens';
 }): Promise<string> {
   if (!params.apiKey) throw new Error(`${params.provider} API key missing`);
   const client = new OpenAI({
     apiKey: params.apiKey,
     baseURL: params.baseURL,
+    timeout: 60_000,
+    maxRetries: 1,
   });
   const response = await client.chat.completions.create({
     model: params.model,
@@ -82,9 +117,34 @@ async function runOpenAICompatible(params: {
       { role: 'system', content: params.system },
       { role: 'user', content: params.prompt },
     ],
-    max_tokens: 4096,
+    // Groq deprecates `max_tokens`; GPT-OSS also burns completion budget on
+    // reasoning, so its sections get a larger ceiling.
+    ...(params.tokenBudgetField === 'max_completion_tokens'
+      ? { max_completion_tokens: params.maxTokens ?? 8192 }
+      : { max_tokens: params.maxTokens ?? 4096 }),
   });
-  return response.choices[0]?.message?.content ?? '';
+  const content = response.choices[0]?.message?.content ?? '';
+  if (!content.trim()) {
+    throw new Error(`${params.provider} returned an empty response`);
+  }
+  return content;
+}
+
+async function runGroq(params: {
+  apiKey: string;
+  system: string;
+  prompt: string;
+}): Promise<string> {
+  return runOpenAICompatible({
+    provider: 'groq',
+    apiKey: params.apiKey,
+    baseURL: GROQ_BASE_URL,
+    model: GROQ_MODEL,
+    system: params.system,
+    prompt: params.prompt,
+    maxTokens: 8192,
+    tokenBudgetField: 'max_completion_tokens',
+  });
 }
 
 // ─── Gemini ──────────────────────────────────────────────────────────────────
@@ -126,7 +186,7 @@ async function runAnthropic(params: {
   system: string;
 }): Promise<string> {
   if (!params.apiKey) throw new Error('Anthropic API key missing');
-  const client = new Anthropic({ apiKey: params.apiKey });
+  const client = new Anthropic({ apiKey: params.apiKey, timeout: 60_000 });
   const message = await client.messages.create({
     model: 'claude-3-5-haiku-latest',
     max_tokens: 4096,
@@ -192,7 +252,12 @@ function runLocalAnalysis(params: {
   const { type, fileTree, keyFiles } = params;
   
   if (type === 'overview') {
-    const pkgJson = keyFiles['package.json'] ? JSON.parse(keyFiles['package.json']) : null;
+    let pkgJson: { name?: string; description?: string; dependencies?: Record<string, string> } | null = null;
+    try {
+      pkgJson = keyFiles['package.json'] ? JSON.parse(keyFiles['package.json']) : null;
+    } catch {
+      pkgJson = null;
+    }
     const name = pkgJson?.name || 'this project';
     const desc = pkgJson?.description || 'a custom codebase';
     const deps = pkgJson?.dependencies ? Object.keys(pkgJson.dependencies).join(', ') : 'various libraries';
@@ -228,6 +293,18 @@ export async function generateDocumentation(params: AiInput): Promise<AiOutput> 
     async () => {
       const providers: { name: ProviderName; run: () => Promise<string> }[] = [
         {
+          name: 'groq',
+          run: () => runGroq({
+            apiKey: resolveKey('groq', userApiKeys),
+            system: 'You are an elite technical architect and writer.',
+            prompt: `Carefully analyze these source files to identify the project's unique purpose, core tech stack, and primary problem it solves. 
+Write a highly detailed, comprehensive project overview (4-6 paragraphs).
+Include a "Tech Stack at a Glance" Markdown TABLE with columns: Category, Technology, and Purpose.
+CRITICAL: You MUST include the header separator line (e.g., | Category | Technology | Purpose |\n|---|---|---|).
+Mention specific frameworks, state management, styling, and database libraries found.\n\n${fileContext}`
+          })
+        },
+        {
           name: 'google',
           run: () => runGemini({
             apiKey: resolveKey('google', userApiKeys),
@@ -236,21 +313,6 @@ export async function generateDocumentation(params: AiInput): Promise<AiOutput> 
 Write a highly detailed, comprehensive project overview (4-6 paragraphs).
 Include a "Tech Stack at a Glance" Markdown TABLE with columns: Category, Technology, and Purpose.
 CRITICAL: You MUST include the header separator line (e.g., | Category | Technology | Purpose |\n|---|---|---|) for the table to render correctly.
-Mention specific frameworks, state management, styling, and database libraries found.\n\n${fileContext}`
-          })
-        },
-        {
-          name: 'groq',
-          run: () => runOpenAICompatible({
-            provider: 'groq',
-            apiKey: resolveKey('groq', userApiKeys),
-            baseURL: 'https://api.groq.com/openai/v1',
-            model: 'llama-3.3-70b-versatile',
-            system: 'You are an elite technical architect and writer.',
-            prompt: `Carefully analyze these source files to identify the project's unique purpose, core tech stack, and primary problem it solves. 
-Write a highly detailed, comprehensive project overview (4-6 paragraphs).
-Include a "Tech Stack at a Glance" Markdown TABLE with columns: Category, Technology, and Purpose.
-CRITICAL: You MUST include the header separator line (e.g., | Category | Technology | Purpose |\n|---|---|---|).
 Mention specific frameworks, state management, styling, and database libraries found.\n\n${fileContext}`
           })
         },
@@ -268,6 +330,7 @@ CRITICAL: You MUST include the header separator line (e.g., | Category | Technol
       ];
 
       for (const p of providers) {
+        if (!resolveKey(p.name, userApiKeys)) continue;
         try {
           return await p.run();
         } catch (e) {
@@ -282,17 +345,23 @@ CRITICAL: You MUST include the header separator line (e.g., | Category | Technol
       const providers: { name: ProviderName; run: () => Promise<string> }[] = [
         {
           name: 'groq',
-          run: () => runOpenAICompatible({
-            provider: 'groq',
+          run: () => runGroq({
             apiKey: resolveKey('groq', userApiKeys),
-            baseURL: 'https://api.groq.com/openai/v1',
-            model: 'llama-3.3-70b-versatile',
             system: 'You are a senior codebase analyst.',
             prompt: `Analyze this codebase file structure in extreme detail. 
 Group the files into logical categories (e.g., Authentication, UI Components, API/Services, State Management, Database Models, Utils).
 Produce a detailed Markdown TABLE for the file structure with columns: Category, Sub-folder, and Key Responsibility.
 CRITICAL: You MUST include the header separator line (e.g., | Category | Sub-folder | Key Responsibility |\n|---|---|---|).
 Explain the architectural patterns (e.g., MVC, Onion, Clean Architecture) being used with technical precision.\n\n${fileTree}`
+          })
+        },
+        {
+          name: 'google',
+          run: () => runGemini({
+            apiKey: resolveKey('google', userApiKeys),
+            system: 'You are a senior codebase analyst.',
+            prompt: `Analyze this codebase file structure in extreme detail and provide a categorized Markdown table of files.
+CRITICAL: You MUST include the header separator line (e.g., | Category | Files | Responsibility |\n|---|---|---|).\n\n${fileTree}`
           })
         },
         {
@@ -311,9 +380,9 @@ Explain the architectural patterns (e.g., MVC, Onion, Clean Architecture) being 
           })
         },
         {
-          name: 'google',
-          run: () => runGemini({
-            apiKey: resolveKey('google', userApiKeys),
+          name: 'mistral',
+          run: () => runMistral({
+            apiKey: resolveKey('mistral', userApiKeys),
             system: 'You are a senior codebase analyst.',
             prompt: `Analyze this codebase file structure in extreme detail and provide a categorized Markdown table of files.
 CRITICAL: You MUST include the header separator line (e.g., | Category | Files | Responsibility |\n|---|---|---|).\n\n${fileTree}`
@@ -322,6 +391,7 @@ CRITICAL: You MUST include the header separator line (e.g., | Category | Files |
       ];
 
       for (const p of providers) {
+        if (!resolveKey(p.name, userApiKeys)) continue;
         try {
           return await p.run();
         } catch (e) {
@@ -336,28 +406,13 @@ CRITICAL: You MUST include the header separator line (e.g., | Category | Files |
       const providers: { name: ProviderName; run: () => Promise<string> }[] = [
         {
           name: 'groq',
-          run: () => runOpenAICompatible({
-            provider: 'groq',
+          run: () => runGroq({
             apiKey: resolveKey('groq', userApiKeys),
-            baseURL: 'https://api.groq.com/openai/v1',
-            model: 'llama-3.3-70b-versatile',
             system: 'You are a senior software engineer.',
             prompt: `Analyze the provided source files and produce an exhaustive, function-level code breakdown. 
 For each key file, provide a Markdown TABLE with columns: Function/Export Name, Parameters, Logic Description, and Impact.
 CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Logic | Impact |\n|---|---|---|---|).
 Ensure no significant utility or hook is missed. Format with deep technical insight.\n\n${fileContext}`
-          })
-        },
-        {
-          name: 'openai',
-          run: () => runOpenAICompatible({
-            provider: 'openai',
-            apiKey: resolveKey('openai', userApiKeys),
-            model: 'gpt-4o-mini',
-            system: 'You are a senior software engineer.',
-            prompt: `Analyze the provided source files and produce an exhaustive, function-level code breakdown. 
-For each key file, provide a Markdown TABLE with columns: Function/Export Name, Parameters, Logic Description, and Impact.
-CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Logic | Impact |\n|---|---|---|---|).\n\n${fileContext}`
           })
         },
         {
@@ -373,9 +428,30 @@ CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Lo
           })
         },
         {
+          name: 'openai',
+          run: () => runOpenAICompatible({
+            provider: 'openai',
+            apiKey: resolveKey('openai', userApiKeys),
+            model: 'gpt-4o-mini',
+            system: 'You are a senior software engineer.',
+            prompt: `Analyze the provided source files and produce an exhaustive, function-level code breakdown. 
+For each key file, provide a Markdown TABLE with columns: Function/Export Name, Parameters, Logic Description, and Impact.
+CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Logic | Impact |\n|---|---|---|---|).\n\n${fileContext}`
+          })
+        },
+        {
           name: 'huggingface',
           run: () => runHuggingFace({
             apiKey: resolveKey('huggingface', userApiKeys),
+            system: 'You are a senior software engineer.',
+            prompt: `Produce an exhaustive, function-level code breakdown table for these files.
+CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Logic | Impact |\n|---|---|---|---|).\n\n${fileContext}`
+          })
+        },
+        {
+          name: 'mistral',
+          run: () => runMistral({
+            apiKey: resolveKey('mistral', userApiKeys),
             system: 'You are a senior software engineer.',
             prompt: `Produce an exhaustive, function-level code breakdown table for these files.
 CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Logic | Impact |\n|---|---|---|---|).\n\n${fileContext}`
@@ -384,6 +460,7 @@ CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Lo
       ];
 
       for (const p of providers) {
+        if (!resolveKey(p.name, userApiKeys)) continue;
         try {
           return await p.run();
         } catch (e) {
@@ -397,6 +474,28 @@ CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Lo
     async () => {
       const providers: { name: ProviderName; run: () => Promise<string> }[] = [
         {
+          name: 'groq',
+          run: () => runGroq({
+            apiKey: resolveKey('groq', userApiKeys),
+            system: 'You are an expert software architect.',
+            prompt: `Deconstruct the architecture of this specific repository in extreme detail. 
+1. Write a deep-dive architecture reasoning section explaining module interactions and advanced design patterns.
+2. Include a "Data Flow & State Transitions" Markdown TABLE with columns: Origin, Action, Logic Handler, and Resulting State.
+CRITICAL: You MUST include the header separator line (e.g., | Origin | Action | Handler | Result |\n|---|---|---|---|).
+3. Generate a high-detail Mermaid.js diagram (graph TD). 
+   - USE SUBGRAPHS to logically group components (e.g., "Frontend Layer", "API & Middleware", "Data Persistence", "External Integrations").
+   - Focus on actual components found in the files.
+
+CRITICAL: In the Mermaid diagram, NODE IDs MUST be simple alphanumeric strings (e.g., A, B, C, file1). NEVER use file paths, slashes, or parentheses in Node IDs. Put the descriptive names or file paths in the node labels only, like this: A["app/page.tsx"] --> B["lib/utils.ts"].
+
+FILE TREE:
+${fileTree}
+
+FILES:
+${fileContext}`
+          })
+        },
+        {
           name: 'google',
           run: () => runGemini({
             apiKey: resolveKey('google', userApiKeys),
@@ -406,8 +505,26 @@ CRITICAL: You MUST include the header separator line (e.g., | Name | Params | Lo
 2. Include a "Data Flow & State Transitions" Markdown TABLE with columns: Origin, Action, Logic Handler, and Resulting State.
 CRITICAL: You MUST include the header separator line (e.g., | Origin | Action | Handler | Result |\n|---|---|---|---|).
 3. Generate a high-detail Mermaid.js diagram (graph TD). 
-   - USE SUBGRAPHS to logically group components (e.g., "Frontend Layer", "API & Middleware", "Data Persistence", "External Integrations").
-   - Focus on actual components found in the files.
+
+CRITICAL: In the Mermaid diagram, NODE IDs MUST be simple alphanumeric strings (e.g., A, B, C, file1). NEVER use file paths, slashes, or parentheses in Node IDs. Put the descriptive names or file paths in the node labels only, like this: A["app/page.tsx"] --> B["lib/utils.ts"].
+
+FILE TREE:
+${fileTree}
+
+FILES:
+${fileContext}`
+          })
+        },
+        {
+          name: 'anthropic',
+          run: () => runAnthropic({
+            apiKey: resolveKey('anthropic', userApiKeys),
+            system: 'You are an expert software architect.',
+            prompt: `Deconstruct the architecture of this specific repository in extreme detail. 
+1. Write a deep-dive architecture reasoning section explaining module interactions and advanced design patterns.
+2. Include a "Data Flow & State Transitions" Markdown TABLE with columns: Origin, Action, Logic Handler, and Resulting State.
+CRITICAL: You MUST include the header separator line (e.g., | Origin | Action | Handler | Result |\n|---|---|---|---|).
+3. Generate a high-detail Mermaid.js diagram (graph TD). 
 
 CRITICAL: In the Mermaid diagram, NODE IDs MUST be simple alphanumeric strings (e.g., A, B, C, file1). NEVER use file paths, slashes, or parentheses in Node IDs. Put the descriptive names or file paths in the node labels only, like this: A["app/page.tsx"] --> B["lib/utils.ts"].
 
@@ -438,53 +555,11 @@ ${fileTree}
 KEY SOURCE FILES:
 ${fileContext}`
           })
-        },
-        {
-          name: 'anthropic',
-          run: () => runAnthropic({
-            apiKey: resolveKey('anthropic', userApiKeys),
-            system: 'You are an expert software architect.',
-            prompt: `Deconstruct the architecture of this specific repository in extreme detail. 
-1. Write a deep-dive architecture reasoning section explaining module interactions and advanced design patterns.
-2. Include a "Data Flow & State Transitions" Markdown TABLE with columns: Origin, Action, Logic Handler, and Resulting State.
-CRITICAL: You MUST include the header separator line (e.g., | Origin | Action | Handler | Result |\n|---|---|---|---|).
-3. Generate a high-detail Mermaid.js diagram (graph TD). 
-
-CRITICAL: In the Mermaid diagram, NODE IDs MUST be simple alphanumeric strings (e.g., A, B, C, file1). NEVER use file paths, slashes, or parentheses in Node IDs. Put the descriptive names or file paths in the node labels only, like this: A["app/page.tsx"] --> B["lib/utils.ts"].
-
-FILE TREE:
-${fileTree}
-
-FILES:
-${fileContext}`
-          })
-        },
-        {
-          name: 'groq',
-          run: () => runOpenAICompatible({
-            provider: 'groq',
-            apiKey: resolveKey('groq', userApiKeys),
-            baseURL: 'https://api.groq.com/openai/v1',
-            model: 'llama-3.3-70b-versatile',
-            system: 'You are an expert software architect.',
-            prompt: `Deconstruct the architecture of this specific repository in extreme detail. 
-1. Write a deep-dive architecture reasoning section explaining module interactions and advanced design patterns.
-2. Include a "Data Flow & State Transitions" Markdown TABLE with columns: Origin, Action, Logic Handler, and Resulting State.
-CRITICAL: You MUST include the header separator line (e.g., | Origin | Action | Handler | Result |\n|---|---|---|---|).
-3. Generate a high-detail Mermaid.js diagram (graph TD). 
-
-CRITICAL: In the Mermaid diagram, NODE IDs MUST be simple alphanumeric strings (e.g., A, B, C, file1). NEVER use file paths, slashes, or parentheses in Node IDs. Put the descriptive names or file paths in the node labels only, like this: A["app/page.tsx"] --> B["lib/utils.ts"].
-
-FILE TREE:
-${fileTree}
-
-FILES:
-${fileContext}`
-          })
         }
       ];
 
       for (const p of providers) {
+        if (!resolveKey(p.name, userApiKeys)) continue;
         try {
           const text = await p.run();
           

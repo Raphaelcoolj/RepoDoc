@@ -107,12 +107,12 @@ export default async function DocPage({ params }: Props) {
         <Link href="/" className="text-lg font-bold gradient-text">
           GramDoc
         </Link>
-        <div className="flex items-center gap-4 text-sm overflow-hidden">
+        <div className="flex items-center gap-3 sm:gap-4 text-sm min-w-0">
           <a
             href={doc.repoUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-slate-400 hover:text-white transition-colors truncate max-w-[120px] md:max-w-none"
+            className="text-slate-400 hover:text-white transition-colors truncate max-w-[120px] sm:max-w-none"
           >
             <span className="hidden md:inline">{doc.repoOwner}/</span>{doc.repoName} ↗
           </a>
@@ -121,9 +121,9 @@ export default async function DocPage({ params }: Props) {
       </nav>
 
       {/* Doc reader */}
-      <div className="max-w-4xl mx-auto px-4 md:px-8 py-10">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 text-sm text-slate-500 mb-3">
+      <div className="max-w-4xl mx-auto px-4 md:px-8 py-6 sm:py-10">
+        <div className="mb-6 sm:mb-8">
+          <div className="flex items-center gap-2 text-sm text-slate-500 mb-3 flex-wrap">
             <span className="text-brand-400 font-mono">{doc.repoOwner}</span>
             <span>/</span>
             <span className="text-brand-400 font-mono">{doc.repoName}</span>

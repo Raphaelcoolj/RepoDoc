@@ -42,9 +42,9 @@ export default async function LandingPage() {
         }}
       />
       {/* Nav */}
-      <nav className="glass sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-        <span className="text-xl font-bold gradient-text">GramDoc</span>
-        <div className="flex items-center gap-4">
+      <nav className="glass sticky top-0 z-50 px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-4">
+        <span className="text-lg sm:text-xl font-bold gradient-text">GramDoc</span>
+        <div className="flex items-center gap-3 sm:gap-4">
           {session?.user ? (
             <>
               <Link
@@ -72,28 +72,28 @@ export default async function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="hero-glow flex-1 flex flex-col items-center justify-center px-6 py-24 text-center">
-        <div className="inline-flex items-center gap-2 glass rounded-full px-4 py-1.5 text-sm text-brand-400 mb-8">
+      <section className="hero-glow flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-16 sm:py-24 text-center">
+        <div className="inline-flex items-center justify-center flex-wrap gap-2 glass rounded-full px-3 sm:px-4 py-1.5 text-xs sm:text-sm text-brand-400 mb-6 sm:mb-8">
           <span className="w-2 h-2 rounded-full bg-brand-400 animate-pulse" />
-          Powered by GPT-4o, Claude, Gemini &amp; more
+          Powered by Groq, GPT-4o, Claude &amp; Gemini
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-black tracking-tight max-w-4xl leading-[1.05]">
+        <h1 className="text-4xl sm:text-5xl md:text-7xl font-black tracking-tight max-w-4xl leading-[1.05]">
           <span className="gradient-text">Instant docs</span>
           <br />
           for any GitHub repo
         </h1>
 
-        <p className="mt-6 text-lg md:text-xl text-slate-400 max-w-2xl leading-relaxed">
+        <p className="mt-6 text-base sm:text-lg md:text-xl text-slate-400 max-w-2xl leading-relaxed">
           Paste a repository URL. GramDoc analyzes the codebase using multiple
           AI models and generates structured documentation with Mermaid.js
           architecture diagrams — in seconds.
         </p>
 
-        <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
+        <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center w-full max-w-md sm:max-w-none">
           <Link
             href={session?.user ? '/dashboard' : '/login'}
-            className="bg-brand-600 hover:bg-brand-500 text-white px-8 py-3.5 rounded-xl font-semibold text-base transition-all hover:scale-105 hover:shadow-[0_0_30px_rgba(99,102,241,0.4)]"
+            className="w-full sm:w-auto bg-brand-600 hover:bg-brand-500 text-white px-8 py-3.5 rounded-xl font-semibold text-base transition-all hover:scale-105 hover:shadow-[0_0_30px_rgba(99,102,241,0.4)]"
           >
             {session?.user ? 'Go to Dashboard →' : 'Get started free →'}
           </Link>
@@ -101,14 +101,14 @@ export default async function LandingPage() {
             href="https://github.com/Raphaelcoolj/RepoDoc.git"
             target="_blank"
             rel="noopener noreferrer"
-            className="glass hover:glow-border text-slate-300 px-8 py-3.5 rounded-xl font-medium text-base transition-all"
+            className="w-full sm:w-auto glass hover:glow-border text-slate-300 px-8 py-3.5 rounded-xl font-medium text-base transition-all"
           >
             View on GitHub
           </a>
         </div>
 
         {/* Feature cards */}
-        <div className="mt-24 grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full text-left">
+        <div className="mt-16 sm:mt-24 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 max-w-5xl w-full text-left">
           {[
             {
               icon: '⚡',
@@ -118,7 +118,7 @@ export default async function LandingPage() {
             {
               icon: '🤖',
               title: 'Multi-model AI',
-              body: 'GPT-4o-mini, Claude Haiku, Grok, Gemini 2.0 Flash, and DeepSeek work together on every doc.',
+              body: 'Groq GPT-OSS leads every run, with GPT-4o-mini, Claude Haiku, Grok, Gemini 2.0 Flash and DeepSeek as fallbacks.',
             },
             {
               icon: '🔑',
