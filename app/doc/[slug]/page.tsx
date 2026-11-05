@@ -4,24 +4,51 @@ import DocReader from '@/components/DocReader';
 import DocFreshnessBanner from '@/components/DocFreshnessBanner';
 import { connectDB } from '@/lib/db';
 import GeneratedDocModel from '@/models/GeneratedDoc';
+import { fixMarkdownTables } from '@/lib/markdown';
+import { getBaseUrl, SITE_NAME } from '@/lib/seo';
 import type { Metadata } from 'next';
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
 
+async function fetchMarkdown(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    return fixMarkdownTables(await res.text());
+  } catch {
+    return null;
+  }
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   await connectDB();
   const doc = await GeneratedDocModel.findOne({ slug }).lean();
-  if (!doc) return { title: 'Not Found — RepoDoc' };
+  if (!doc) return { title: 'Not Found' };
+  const title = `${doc.repoOwner}/${doc.repoName} Documentation`;
+  const description = `AI-generated documentation for ${doc.repoOwner}/${doc.repoName}: architecture diagrams, setup instructions and code explanations.`;
   return {
-    title: `${doc.repoOwner}/${doc.repoName} — RepoDoc`,
-    description: `AI-generated documentation for ${doc.repoUrl}`,
+    title,
+    description,
+    alternates: {
+      canonical: `/doc/${slug}`,
+    },
     openGraph: {
-      title: `${doc.repoOwner}/${doc.repoName} — RepoDoc`,
-      description: `AI-generated documentation with architecture diagrams`,
+      title,
+      description,
+      url: `/doc/${slug}`,
+      siteName: SITE_NAME,
       type: 'article',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
     },
   };
 }
@@ -40,8 +67,41 @@ export default async function DocPage({ params }: Props) {
 
   if (!doc) notFound();
 
+  const markdown = await fetchMarkdown(doc.cloudinaryUrl);
+  const base = getBaseUrl();
+  const canonical = `${base}/doc/${doc.slug}`;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: `${doc.repoOwner}/${doc.repoName} Documentation`,
+    description: `AI-generated documentation for ${doc.repoOwner}/${doc.repoName}: architecture diagrams, setup instructions and code explanations.`,
+    url: canonical,
+    datePublished: new Date(doc.createdAt).toISOString(),
+    author: {
+      '@type': 'Organization',
+      name: doc.repoOwner,
+      url: doc.repoUrl,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: SITE_NAME,
+      url: base,
+    },
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': canonical,
+    },
+  };
+
   return (
     <main className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+        }}
+      />
       {/* Top bar */}
       <nav className="glass sticky top-0 z-50 px-4 md:px-6 py-3.5 flex items-center justify-between">
         <Link href="/" className="text-lg font-bold gradient-text">
@@ -81,7 +141,7 @@ export default async function DocPage({ params }: Props) {
 
         <DocFreshnessBanner slug={doc.slug} />
 
-        <DocReader cloudinaryUrl={doc.cloudinaryUrl} />
+        <DocReader cloudinaryUrl={doc.cloudinaryUrl} initialMarkdown={markdown} />
       </div>
     </main>
   );

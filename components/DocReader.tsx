@@ -4,9 +4,11 @@ import { useEffect, useState, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import mermaid from 'mermaid';
+import { fixMarkdownTables } from '@/lib/markdown';
 
 interface Props {
   cloudinaryUrl: string;
+  initialMarkdown?: string | null;
 }
 
 mermaid.initialize({
@@ -71,31 +73,27 @@ function MermaidDiagram({ chart }: { chart: string }) {
   );
 }
 
-export default function DocReader({ cloudinaryUrl }: Props) {
-  const [markdown, setMarkdown] = useState('');
-  const [loading, setLoading] = useState(true);
+export default function DocReader({ cloudinaryUrl, initialMarkdown }: Props) {
+  const [markdown, setMarkdown] = useState(initialMarkdown ?? '');
+  const [loading, setLoading] = useState(initialMarkdown == null);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (initialMarkdown != null) return;
     fetch(cloudinaryUrl, { cache: 'no-store' })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.text();
       })
       .then((text) => {
-        // Aggressive table fixer: ensures double newlines and removes trailing spaces
-        const fixed = text
-          .replace(/([^\n])\r?\n\|/g, '$1\n\n|')
-          .replace(/\|\r?\n([^\n])/g, '|\n\n$1')
-          .replace(/\|\s+\r?\n/g, '|\n');
-        setMarkdown(fixed);
+        setMarkdown(fixMarkdownTables(text));
         setLoading(false);
       })
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : 'Failed to load documentation');
         setLoading(false);
       });
-  }, [cloudinaryUrl]);
+  }, [cloudinaryUrl, initialMarkdown]);
 
   if (loading) {
     return (

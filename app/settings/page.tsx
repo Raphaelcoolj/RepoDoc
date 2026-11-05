@@ -4,8 +4,9 @@ import KeySettings from '@/components/KeySettings';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Settings — RepoDoc',
+  title: 'Settings',
   description: 'Manage your BYOK API keys for unlimited documentation generations.',
+  robots: { index: false, follow: false },
 };
 
 export default async function SettingsPage() {

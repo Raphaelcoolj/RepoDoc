@@ -1,11 +1,45 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { auth } from '@/auth';
+import { getBaseUrl, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from '@/lib/seo';
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: '/',
+  },
+};
 
 export default async function LandingPage() {
   const session = await auth();
 
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: getBaseUrl(),
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'Web',
+    sameAs: [SITE_URL],
+    creator: {
+      '@type': 'Organization',
+      name: 'SphereBrilliq',
+    },
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
+  };
+
   return (
     <main className="min-h-screen flex flex-col">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c'),
+        }}
+      />
       {/* Nav */}
       <nav className="glass sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <span className="text-xl font-bold gradient-text">RepoDoc</span>
@@ -117,7 +151,8 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-[#2a2a48] px-6 py-6 text-center text-sm text-slate-500">
-        © {new Date().getFullYear()} RepoDoc. Documentation-as-a-Service.
+        © {new Date().getFullYear()} RepoDoc. Documentation-as-a-Service. Built
+        by SphereBrilliq.
       </footer>
     </main>
   );

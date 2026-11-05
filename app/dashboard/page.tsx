@@ -7,8 +7,9 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Dashboard — RepoDoc',
+  title: 'Dashboard',
   description: 'Generate documentation for any public GitHub repository.',
+  robots: { index: false, follow: false },
 };
 
 interface DocRecord {

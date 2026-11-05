@@ -182,13 +182,13 @@ async function main(): Promise<number> {
     }
 
     const collections = await db.listCollections().toArray();
-    if (!collections.some((c) => c.name === 'generated_docs')) {
+    if (!collections.some((c) => c.name === 'generateddocs')) {
       const names = collections.map((c) => c.name).join(', ') || '(none)';
-      console.error(`collection generated_docs not found; available: ${names}`);
+      console.error(`collection generateddocs not found; available: ${names}`);
       return 1;
     }
 
-    const col = db.collection('generated_docs');
+    const col = db.collection('generateddocs');
 
     const indexes = await col.indexes();
     const repoUrlIdx = indexes.find((i) => i.name === 'repoUrl_1');

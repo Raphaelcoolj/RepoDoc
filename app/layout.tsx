@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { getBaseUrl, SITE_DESCRIPTION, SITE_NAME, SITE_TITLE } from '@/lib/seo';
 import './globals.css';
 
 const inter = Inter({
@@ -9,14 +10,47 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'RepoDoc — AI-Powered Repository Documentation',
-  description:
-    'Paste a GitHub URL. Get instant, AI-generated documentation with Mermaid architecture diagrams and plain-English code explanations.',
-  keywords: ['documentation', 'github', 'AI', 'mermaid', 'code analysis'],
+  metadataBase: new URL(getBaseUrl()),
+  title: {
+    default: SITE_TITLE,
+    template: '%s — RepoDoc',
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    'documentation',
+    'github',
+    'AI',
+    'mermaid',
+    'code analysis',
+    'repository documentation',
+    'code documentation generator',
+    'AI documentation',
+  ],
+  authors: [{ name: 'RepoDoc' }, { name: 'SphereBrilliq' }],
   openGraph: {
-    title: 'RepoDoc',
-    description: 'Documentation-as-a-Service for any GitHub repository.',
     type: 'website',
+    locale: 'en_US',
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: '/',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
   },
 };
 

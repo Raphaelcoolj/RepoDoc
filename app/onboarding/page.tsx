@@ -6,8 +6,9 @@ import OnboardingClient from './OnboardingClient';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Setup — RepoDoc',
+  title: 'Setup',
   description: 'Add your API keys to get unlimited documentation generations.',
+  robots: { index: false, follow: false },
 };
 
 export default async function OnboardingPage() {
