@@ -27,7 +27,10 @@ export const metadata: Metadata = {
     'code documentation generator',
     'AI documentation',
   ],
-  authors: [{ name: 'RepoDoc' }, { name: 'SphereBrilliq' }],
+  authors: [
+    { name: 'RepoDoc' },
+    { name: 'SphereBrilliq', url: 'https://spherebrilliq.online' },
+  ],
   openGraph: {
     type: 'website',
     locale: 'en_US',

@@ -24,6 +24,7 @@ export default async function LandingPage() {
     creator: {
       '@type': 'Organization',
       name: 'SphereBrilliq',
+      url: 'https://spherebrilliq.online',
     },
     offers: {
       '@type': 'Offer',
@@ -152,7 +153,16 @@ export default async function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-[#2a2a48] px-6 py-6 text-center text-sm text-slate-500">
         © {new Date().getFullYear()} RepoDoc. Documentation-as-a-Service. Built
-        by SphereBrilliq.
+        by{' '}
+        <a
+          href="https://spherebrilliq.online"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-400 hover:text-white transition-colors"
+        >
+          SphereBrilliq
+        </a>
+        .
       </footer>
     </main>
   );
